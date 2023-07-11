@@ -292,7 +292,7 @@ static int amba_probe(struct device *dev)
 		dev_pm_domain_detach(dev, true);
 	} while (0);
 
-	return 0;
+	return ret;
 }
 
 static int amba_remove(struct device *dev)
@@ -503,7 +503,7 @@ static DEFINE_MUTEX(deferred_devices_lock);
 static void amba_deferred_retry_func(struct work_struct *dummy);
 static DECLARE_DELAYED_WORK(deferred_retry_work, amba_deferred_retry_func);
 
-#define DEFERRED_DEVICE_TIMEOUT (msecs_to_jiffies(5 * 1000))
+#define DEFERRED_DEVICE_TIMEOUT (msecs_to_jiffies(1 * 1000))
 
 static int amba_deferred_retry(void)
 {

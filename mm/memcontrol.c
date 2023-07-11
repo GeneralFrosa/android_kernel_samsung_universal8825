@@ -1372,6 +1372,38 @@ out:
 	return lruvec;
 }
 
+struct lruvec *page_to_lruvec(struct page *page, pg_data_t *pgdat)
+{
+	struct lruvec *lruvec;
+
+	lruvec = mem_cgroup_page_lruvec(page, pgdat);
+
+	return lruvec;
+}
+EXPORT_SYMBOL_GPL(page_to_lruvec);
+
+void do_traversal_all_lruvec(void)
+{
+	pg_data_t *pgdat;
+
+	for_each_online_pgdat(pgdat) {
+		struct mem_cgroup *memcg = NULL;
+
+		spin_lock_irq(&pgdat->lru_lock);
+		memcg = mem_cgroup_iter(NULL, NULL, NULL);
+		do {
+			struct lruvec *lruvec = mem_cgroup_lruvec(memcg, pgdat);
+
+			trace_android_vh_do_traversal_lruvec(lruvec);
+
+			memcg = mem_cgroup_iter(NULL, memcg, NULL);
+		} while (memcg);
+
+		spin_unlock_irq(&pgdat->lru_lock);
+	}
+}
+EXPORT_SYMBOL_GPL(do_traversal_all_lruvec);
+
 /**
  * mem_cgroup_update_lru_size - account for adding or removing an lru page
  * @lruvec: mem_cgroup per zone lru vector
@@ -2883,7 +2915,6 @@ static void commit_charge(struct page *page, struct mem_cgroup *memcg)
 	 * - LRU isolation
 	 * - lock_page_memcg()
 	 * - exclusive reference
-	 * - mem_cgroup_trylock_pages()
 	 */
 	page->mem_cgroup = memcg;
 }
@@ -3569,6 +3600,42 @@ static int mem_cgroup_hierarchy_write(struct cgroup_subsys_state *css,
 	return retval;
 }
 
+#ifdef CONFIG_MEMCG_HEIMDALL
+static ssize_t mem_cgroup_force_shrink_write(struct kernfs_open_file *of,
+					    char *buf, size_t nbytes,
+					    loff_t off)
+{
+	int type;
+	unsigned long size;
+	char *str;
+	int ret = -EINVAL;
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+
+	if (mem_cgroup_is_root(memcg))
+		goto error;
+
+	buf = strstrip(buf);
+	str = strchr(buf, ',');
+	if (str == NULL)
+		goto error;
+
+	*str = '\0';
+	ret = kstrtoul(str+1, 10, &size);
+	if (ret)
+		goto error;
+
+	ret = kstrtoint(buf, 10, &type);
+	if (ret)
+		goto error;
+
+	if (type > 0 && type <= MEMCG_HEIMDALL_SHRINK_FILE)
+		forced_shrink_node_memcg(NODE_DATA(0), memcg, type, size / PAGE_SIZE);
+
+error:
+	return ret ?: nbytes;
+}
+#endif
+
 static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 {
 	unsigned long val;
@@ -3579,10 +3646,16 @@ static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 		if (swap)
 			val += memcg_page_state(memcg, MEMCG_SWAP);
 	} else {
+#ifdef CONFIG_MEMCG_HEIMDALL
+		val = memcg_page_state(memcg, NR_ANON_MAPPED);
+		if (swap)
+			val += memcg_page_state(memcg, MEMCG_SWAP);
+#else
 		if (!swap)
 			val = page_counter_read(&memcg->memory);
 		else
 			val = page_counter_read(&memcg->memsw);
+#endif
 	}
 	return val;
 }
@@ -5062,6 +5135,12 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.seq_show = memcg_numa_stat_show,
 	},
 #endif
+#ifdef CONFIG_MEMCG_HEIMDALL
+	{
+		.name = "force_shrink",
+		.write = mem_cgroup_force_shrink_write,
+	},
+#endif
 	{
 		.name = "kmem.limit_in_bytes",
 		.private = MEMFILE_PRIVATE(_KMEM, RES_LIMIT),
@@ -5255,7 +5334,6 @@ static void __mem_cgroup_free(struct mem_cgroup *memcg)
 
 static void mem_cgroup_free(struct mem_cgroup *memcg)
 {
-	lru_gen_exit_memcg(memcg);
 	memcg_wb_domain_exit(memcg);
 	/*
 	 * Flush percpu vmstats and vmevents to guarantee the value correctness
@@ -5331,7 +5409,6 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 #endif
 	idr_replace(&mem_cgroup_idr, memcg, memcg->id.id);
 	trace_android_vh_mem_cgroup_alloc(memcg);
-	lru_gen_init_memcg(memcg);
 	return memcg;
 fail:
 	mem_cgroup_id_remove(memcg);
@@ -6226,29 +6303,6 @@ static void mem_cgroup_move_task(void)
 }
 #endif
 
-#ifdef CONFIG_LRU_GEN
-static void mem_cgroup_attach(struct cgroup_taskset *tset)
-{
-	struct cgroup_subsys_state *css;
-	struct task_struct *task = NULL;
-
-	cgroup_taskset_for_each_leader(task, css, tset)
-		break;
-
-	if (!task)
-		return;
-
-	task_lock(task);
-	if (task->mm && task->mm->owner == task)
-		lru_gen_migrate_mm(task->mm);
-	task_unlock(task);
-}
-#else
-static void mem_cgroup_attach(struct cgroup_taskset *tset)
-{
-}
-#endif /* CONFIG_LRU_GEN */
-
 /*
  * Cgroup retains root cgroups across [un]mount cycles making it necessary
  * to verify whether we're attached to the default hierarchy on each mount
@@ -6601,7 +6655,6 @@ struct cgroup_subsys memory_cgrp_subsys = {
 	.css_free = mem_cgroup_css_free,
 	.css_reset = mem_cgroup_css_reset,
 	.can_attach = mem_cgroup_can_attach,
-	.attach = mem_cgroup_attach,
 	.cancel_attach = mem_cgroup_cancel_attach,
 	.post_attach = mem_cgroup_move_task,
 	.bind = mem_cgroup_bind,

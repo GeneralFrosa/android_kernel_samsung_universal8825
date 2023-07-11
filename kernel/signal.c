@@ -57,6 +57,10 @@
 #include <asm/siginfo.h>
 #include <asm/cacheflush.h>
 
+#ifdef CONFIG_SAMSUNG_FREECESS
+#include <linux/freecess.h>
+#endif
+
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/signal.h>
 /*
@@ -1214,7 +1218,10 @@ static int send_signal(int sig, struct kernel_siginfo *info, struct task_struct 
 {
 	/* Should SIGKILL or SIGSTOP be received by a pid namespace init? */
 	bool force = false;
-
+	if (sig == 41) {
+		pr_info("Send signal %d from %s(%d) to %s(%d) : %d\n",
+			sig, current->comm, current->pid, t->comm, t->pid, info->si_code);
+	}
 	if (info == SEND_SIG_NOINFO) {
 		/* Force if sent from an ancestor pid namespace */
 		force = !task_pid_nr_ns(current, task_active_pid_ns(t));
@@ -1289,6 +1296,15 @@ int do_send_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *p
 {
 	unsigned long flags;
 	int ret = -ESRCH;
+
+#ifdef CONFIG_SAMSUNG_FREECESS
+	/*
+	 * System will send SIGIO to the app that locked the file when other apps access the file.
+	 * Report SIGIO to prevent other apps from getting stuck
+	 */
+	if ((sig == SIGKILL || sig == SIGTERM || sig == SIGABRT || sig == SIGQUIT || sig == SIGIO))
+		sig_report(p);
+#endif
 	trace_android_vh_do_send_sig_info(sig, current, p);
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal(sig, info, p, type);
@@ -1400,7 +1416,6 @@ struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 
 	return sighand;
 }
-EXPORT_SYMBOL_GPL(__lock_task_sighand);
 
 /*
  * send signal info to all the members of a group
@@ -1420,6 +1435,7 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
 			bool reap = false;
 
 			trace_android_vh_process_killed(current, &reap);
+			trace_android_vh_killed_process(current, p, &reap);
 			if (reap)
 				add_to_oom_reaper(p);
 		}
