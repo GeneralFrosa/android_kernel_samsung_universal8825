@@ -3,17 +3,17 @@ dtb-y += exynos/s5e9925.dtb
 dtb-y += exynos/s5e8825.dtb
 dtb-y += exynos/exynos2100.dtb
 
-dtbo-y += samsung/a53x/a53x_eur_open_w00_r00.dtbo
-dtbo-y += samsung/a53x/a53x_eur_open_w00_r05.dtbo
-dtbo-y += samsung/a53x/a53x_eur_open_w00_r02.dtbo
-dtbo-y += samsung/a53x/a53x_eur_open_w00_r01.dtbo
-dtbo-y += samsung/a53x/a53x_eur_open_w00_r06.dtbo
+dtbo-y += samsung/a53x_eur_open_w00_r00.dtbo
+dtbo-y += samsung/a53x_eur_open_w00_r05.dtbo
+dtbo-y += samsung/a53x_eur_open_w00_r02.dtbo
+dtbo-y += samsung/a53x_eur_open_w00_r01.dtbo
+dtbo-y += samsung/a53x_eur_open_w00_r06.dtbo
 
-dtbo-y += samsung/a33x/a33x_sea_open_w00_r00.dtbo
-dtbo-y += samsung/a33x/a33x_sea_open_w00_r01.dtbo
-dtbo-y += samsung/a33x/a33x_sea_open_w00_r04.dtbo
-dtbo-y += samsung/a33x/a33x_sea_open_w00_r02.dtbo
-dtbo-y += samsung/a33x/a33x_sea_open_w00_r03.dtbo
+dtbo-y += samsung/a33x_sea_open_w00_r00.dtbo
+dtbo-y += samsung/a33x_sea_open_w00_r01.dtbo
+dtbo-y += samsung/a33x_sea_open_w00_r04.dtbo
+dtbo-y += samsung/a33x_sea_open_w00_r02.dtbo
+dtbo-y += samsung/a33x_sea_open_w00_r03.dtbo
 
 dtb-y += allwinner/sun50i-h5-orangepi-pc2.dtb
 dtb-y += allwinner/sun50i-h6-tanix-tx6.dtb
